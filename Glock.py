@@ -2,7 +2,84 @@ import numpy as np
 import sounddevice as sd
 import time
 import pygame
+from threading import Thread
+import math
+import matplotlib.pyplot as plt
 
+SAMPLE_RATE = 44100
+
+class Bar:
+
+    def __init__(self, L, l, h, ro, E):
+        self.L = L
+        self.l = l 
+        self.ro = ro
+        self.h = h
+        self. V = l * L * h
+        self.S = l * h 
+        self. M = ro * self.V
+        #self.I = 1/12 * ro * h * l * L**3
+        self.I = 1/12 * self.M * L**2
+        self.E = E
+
+        self.length = 1
+        self.atten = 0.6
+        self.tau = 10**-6
+
+    def getFreq(self, n):
+
+        return 1/1000 * math.sqrt(self.E*self.I/(self.ro*self.S))*(math.pi/(8*self.L**2))*((2*n)+1)**2
+
+    def getFreqs(self):
+
+        F = []
+        f = self.getFreq(1)
+        n = 1
+        while f < 30000:
+            F.append(f)
+            f = self.getFreq(n)        
+            n += 1
+
+        return F
+
+    def add(self, L, L2):
+        if len(L) == len(L2):
+            for i in range(len(L)):
+                L[i] += L[i]
+            return L
+        else:
+            raise ValueError("List must have same size")
+
+
+    def getSignal(self):
+
+        F = self.getFreqs()
+
+        each_sample_number = np.arange(self.length * SAMPLE_RATE)
+
+        atten = self.atten
+
+        S = np.sin(2 * np.pi * each_sample_number * self.getFreq(1) / SAMPLE_RATE)
+
+        for i in range(len(S)):
+            S[i] = S[i] * math.exp(-i*self.getFreq(1)*self.tau)
+
+        for freq in F[1:]:
+
+            tau = freq*self.tau
+
+            s = np.sin(2 * np.pi * each_sample_number * freq / SAMPLE_RATE) * atten
+
+            for i in range(len(s)):
+                s[i] = s[i] * math.exp(-i*tau)
+
+            S = self.add(S, s)
+
+
+        #plt.plot(S)
+        #plt.show()
+
+        return S
 
 class Glockenspiel:
 
@@ -28,8 +105,11 @@ class Glockenspiel:
 
         screen = pygame.display.set_mode(windowSize)
 
+        self.L = [0, 101, 96, 92, 87, 85, 80, 76, 72, 70, 65, 62, 60]
 
-        self.params_notes = [0, 261.63, 277.18, 293.66, 311.13, 329.63, 349.23, 369.99, 392., 415.3, 440., 466.16, 493.88]
+        self.params_notes = [(x*10**-3, 20*10**-3, 2*10**-3, 7500, 210*10**9) for x in self.L]
+
+       #self.params_notes = [0, 261.63, 277.18, 293.66, 311.13, 329.63, 349.23, 369.99, 392., 415.3, 440., 466.16, 493.88]
 
     def run(self):
 
@@ -98,22 +178,22 @@ class Glockenspiel:
 
                 if event.key == pygame.K_k:
                     # do
-                    Note(2*self.params_notes[1]).play()                 
+                    Note(self.params_notes[1], 2).play()                 
                 if event.key == pygame.K_o:
                     # do#
-                    Note(2*self.params_notes[2]).play()
+                    Note(self.params_notes[2], 2).play()
 
                 if event.key == pygame.K_l:
                     # re
-                    Note(2*self.params_notes[3]).play()
+                    Note(self.params_notes[3], 2).play()
 
                 if event.key == pygame.K_p:
                     # re#
-                    Note(2*self.params_notes[4]).play()
+                    Note(self.params_notes[4], 2).play()
 
                 if event.key == pygame.K_m:
                     # mi
-                    Note(2*self.params_notes[5]).play()
+                    Note(self.params_notes[5], 2).play()
 
 
     def quit(self):
@@ -124,43 +204,24 @@ class Glockenspiel:
 
 
 
-class Note:
+class Note():
 
-    def __init__(self, params, sampleRate = 44100):
-        self.sampleRate = sampleRate
-        self.params = params # Parameters for the physical model
-
+    def __init__(self, params, mult = 1):
+        (self.L, self.l, self.h, self.ro, self.E) = params # Parameters of the physical model
+        self.L = self.L  /mult
         self.length = 0.1
         # Length should be computed from the physical model
 
 
-    # Temporary !!
-    def getFreq(self):
-
-        return self.params
-
-
-    def getHarmonics(self):
-
-        # TODO call the physical model to get the harmonics
-
-        return [1]
-
     def getSignal(self):
 
-        atten = 0.3
-        # atten is the attenuation we want, should depend of time
-
-        each_sample_number = np.arange(self.length * self.sampleRate)
-        waveform = np.sin(2 * np.pi * each_sample_number * self.getFreq() / self.sampleRate) * atten
-        
-
-        return waveform
+        b = Bar(self.L, self.l, self.h, self.ro, self.E)
+        return b.getSignal()
 
     def play(self):
 
         # Play the waveform out the speakers
-        sd.play(self.getSignal(), self.sampleRate)
+        sd.play(self.getSignal(), SAMPLE_RATE)
         time.sleep(self.length)
         sd.stop()
 
