@@ -7,6 +7,7 @@ import math
 import matplotlib.pyplot as plt
 
 SAMPLE_RATE = 44100
+LENGTH = 1
 
 class Bar:
 
@@ -19,28 +20,58 @@ class Bar:
         self.S = l * h 
         self. M = ro * self.V
         #self.I = 1/12 * ro * h * l * L**3
-        self.I = 1/12 * self.M * L**2
+        #self.I = 1/12 * self.M * L**2
+        self.I = l*h**3 /12
         self.E = E
+        self.length = LENGTH
 
-        self.length = 1
+
+
         self.atten = 0.6
-        self.tau = 10**-6
+        self.tau = 10**-7
 
     def getFreq(self, n):
 
-        return 1/1000 * math.sqrt(self.E*self.I/(self.ro*self.S))*(math.pi/(8*self.L**2))*((2*n)+1)**2
+        return (2*n+1)**2 * math.sqrt(self.E*self.I/(self.ro*self.S))*(math.pi/(8*(self.L**2)))   
 
     def getFreqs(self):
 
         F = []
         f = self.getFreq(1)
         n = 1
-        while f < 30000:
+        while f < 20000:
             F.append(f)
             f = self.getFreq(n)        
             n += 1
 
         return F
+
+    def p(self, n):
+
+        if n %2 == 1 :
+            return 0
+        else:
+            return (-1)**n
+
+
+    def getA(self,n):
+
+
+        K = 1
+        Kn =  (2*n +1)/self.L*2 * math.pi
+        Mr = 1
+        v0 = 1
+
+        return (5/(4*K) * Mr * v0**2/(math.exp(Kn*self.L/2)) + self.p(n) * math.sqrt(2))**(2/5)
+
+    def getAis(self, F):
+
+        A = []
+
+        for i in range(len(F)):
+            A.append()
+
+
 
     def add(self, L, L2):
         if len(L) == len(L2):
@@ -59,27 +90,33 @@ class Bar:
 
         atten = self.atten
 
-        S = np.sin(2 * np.pi * each_sample_number * self.getFreq(1) / SAMPLE_RATE)
+        S = np.sin(2 * np.pi * each_sample_number * self.getFreq(1) / SAMPLE_RATE) * 0.1
 
-        for i in range(len(S)):
-            S[i] = S[i] * math.exp(-i*self.getFreq(1)*self.tau)
+        for t in range(len(S)):
+            S[t] = S[t] * math.exp(-t*self.getFreq(1)*self.tau)
+
+        n = 1
 
         for freq in F[1:]:
 
             tau = freq*self.tau
 
-            s = np.sin(2 * np.pi * each_sample_number * freq / SAMPLE_RATE) * atten
+            s = np.sin(2 * np.pi * each_sample_number * freq / SAMPLE_RATE) * self.getA(n) * 0.1
 
             for i in range(len(s)):
                 s[i] = s[i] * math.exp(-i*tau)
 
             S = self.add(S, s)
+            n += 1
 
 
         #plt.plot(S)
         #plt.show()
 
         return S
+
+#b = Bar(60*10**-3, 20*10**-3, 2*10**-3, 7500, 210*10**9)
+#print(b.getFreq(1))
 
 class Glockenspiel:
 
@@ -209,7 +246,7 @@ class Note():
     def __init__(self, params, mult = 1):
         (self.L, self.l, self.h, self.ro, self.E) = params # Parameters of the physical model
         self.L = self.L  /mult
-        self.length = 0.1
+        self.length = LENGTH
         # Length should be computed from the physical model
 
 
